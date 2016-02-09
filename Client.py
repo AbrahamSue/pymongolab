@@ -19,6 +19,7 @@ __apis__ = {
     'get_document': { 'Command': 'GET /databases/{database}/collections/{collection}/{_id}'},
     'set_document': { 'Command': 'PUT /databases/{database}/collections/{collection}/{_id}'},
     'del_document': { 'Command': 'DELETE /databases/{database}/collections/{collection}/{_id}'},
+    'run_command': { 'Command': 'POST /databases/{database}/runCommand'}
 }
 
 __headers__ = {
@@ -40,23 +41,26 @@ class MongoLabClient():
         fns = __apis__[ func ]
         if 'Command' not in fns: return None
         ( verb, cmd_uri ) = fns['Command'].split(' ', 2) 
+        kw = self.kwdefault.copy()
+        kw.update(kwargs)
         ps = ''
         if 'Param' in fns:
             pl = fns['Param'].replace('[','').split('&')
             plManda = [ x.split("=", 1)[0] for x in pl if ']' not in x ]
             plOptional = [ x.split("=", 1)[0] for x in pl if ']'  in x ]
-            plMissing = filter(lambda x:x not in kwargs, plManda)
-            plProvided = filter(lambda x:x in kwargs, plManda + plOptional)
-        if len(plMissing) > 0: return None
-        ps = '&' + '&'.join( [ '='.join( (x, urllib.quote_plus( str( kwargs[x] )) ) ) for x in plProvided ] )
-        uri = "%s%s?apiKey=%s%s" % (__Base_URL__, cmd_uri.format(**kwargs), self.APIKey, ps)
+            plMissing = filter(lambda x:x not in kw, plManda)
+            plProvided = filter(lambda x:x in kw, plManda + plOptional)
+            if len(plMissing) > 0: return None
+            ps = '&' + '&'.join( [ '='.join( (x, urllib.quote_plus( str( kw[x] )) ) ) for x in plProvided ] )
+    
+        uri = "%s%s?apiKey=%s%s" % (__Base_URL__, cmd_uri.format(**kw), self.APIKey, ps)
 #        print "Calling %s with %s: %s\n" % ( func, verb, uri)
         ds = json.dumps(
-                 kwargs['data'], skipkeys=True, sort_keys=True, indent=4,
+                 kw['data'], skipkeys=True, sort_keys=True, indent=4,
                  default=lambda x: x if isinstance(x, (str, unicode, int, long, float)) else "%s object at %s" % (type(x), hex(id(x))) 
-             ) if 'data' in kwargs else None
+             ) if 'data' in kw else None
 
-#        data = kwargs['data'] if 'data' in kwargs else None
+#        data = kw['data'] if 'data' in kw else None
         try: resp, content = self.urlfetch(uri, verb, __headers__, ds)
         except httplib2.ServerNotFoundError as e:
             print '%s is not avaiable' % uri
@@ -100,11 +104,15 @@ class MongoLabClient():
     def __init__(self, __api_key__):
         self.APIKey = __api_key__
         self.urlfetch = self.__urlfetch_httplib2__
+        self.kwdefault = {}
 #        print __api_key__
 #        print len(__api_key__)
         if len(__api_key__) == 32:
             for name in __apis__:
                 setattr( self.__class__, name, self.__make_method__(name))
+
+    def set(self, **kwargs):
+        self.kwdefault.update(kwargs)
 
 if __name__ == "__main__":
     from os import environ
@@ -135,7 +143,14 @@ if __name__ == "__main__":
 
 #    print mc.insert_document(database='default', collection='test', data={ "name": "test", "value": "35499", "timestamp" : datetime.now().isoformat() })
 #    print mc.del_document(database='default', collection='test', _id='56ba205be4b0a81ce4060509')
-    print mc.list_documents(database='default', collection='test', q='{ "name": "test" }', v='true')
+    mc.set(database='test', collection='Proxy')
+    mc.set(database='test1l')
+    mc.set(collection='Proxyi1')
+    mc.set(database='default', collection='Proxy')
+   
+    print mc.list_documents()
+    print mc.list_documents(collection='test', q=json.dumps({ "name": "test" }), c='true')
+    print mc.run_command(database='default', data={ 'getLastError':'test' } )
 
 #    __MongoLabAPI_Handler__(mc, 'list_databases')
 

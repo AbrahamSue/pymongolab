@@ -29,16 +29,28 @@ __headers__ = {
 
 class MongoLabClient():
     def __urlfetch_httplib2__(self, url, method='GET', headers=None, data=None):
-        print "__urlfetch_httplib2__ called with\n  %s %s %s %s\n" % ( method, url, headers, data )
+#        print "__urlfetch_httplib2__ called with\n  %s %s %s %s\n" % ( method, url, headers, data )
         return httplib2.Http(disable_ssl_certificate_validation=True).request(url, method, headers=headers, body=data)
 
     def __MongoLabAPI_Handler__(self, func, **kwargs):
     #    if func not in __apis__.keys():
     #        yield None
     #    print kwargs
-        ( verb, cmd_uri ) = __apis__[ func ]['Command'].split(' ', 2) 
-        uri = "%s%s?apiKey=%s" % (__Base_URL__, cmd_uri.format(**kwargs), self.APIKey)
-        print "Calling %s with %s: %s\n" % ( func, verb, uri)
+        if func not in __apis__: return None
+        fns = __apis__[ func ]
+        if 'Command' not in fns: return None
+        ( verb, cmd_uri ) = fns['Command'].split(' ', 2) 
+        ps = ''
+        if 'Param' in fns:
+            pl = fns['Param'].replace('[','').split('&')
+            plManda = [ x.split("=", 1)[0] for x in pl if ']' not in x ]
+            plOptional = [ x.split("=", 1)[0] for x in pl if ']'  in x ]
+            plMissing = filter(lambda x:x not in kwargs, plManda)
+            plProvided = filter(lambda x:x in kwargs, plManda + plOptional)
+        if len(plMissing) > 0: return None
+        ps = '&' + '&'.join( [ '='.join( (x, urllib.quote_plus( str( kwargs[x] )) ) ) for x in plProvided ] )
+        uri = "%s%s?apiKey=%s%s" % (__Base_URL__, cmd_uri.format(**kwargs), self.APIKey, ps)
+#        print "Calling %s with %s: %s\n" % ( func, verb, uri)
         ds = json.dumps(
                  kwargs['data'], skipkeys=True, sort_keys=True, indent=4,
                  default=lambda x: x if isinstance(x, (str, unicode, int, long, float)) else "%s object at %s" % (type(x), hex(id(x))) 
@@ -49,14 +61,14 @@ class MongoLabClient():
         except httplib2.ServerNotFoundError as e:
             print '%s is not avaiable' % uri
 
-        print resp
-        print content
+#        print resp
+#        print content
 #        st = int(resp['status']) if 'status' in resp else 0
         contentjs=None
         if 'status' in resp and resp['status'].startswith('2') \
          and 'content-type' in resp and resp['content-type'].startswith('application/json'):
             contentjs = json.loads(content)
-            if 'Return' in __apis__[ func ] and __apis__[ func ]['Return'].startswith('json'):
+            if 'Return' in fns and fns['Return'].startswith('json'):
 #                print __apis__[ func ]['Return']
 #                print __apis__[ func ]['Return'].replace(']', '')
 #                print __apis__[ func ]['Return'].replace(']', '').split('[')
@@ -121,10 +133,9 @@ if __name__ == "__main__":
 #    for x in mc.list_documents(database='default', collection='Proxy'):
 #        print mc.get_document(database='default', collection='Proxy', _id=x['_id']['$oid'])
 
-
-    print mc.insert_document(database='default', collection='test', data={ "name": "test", "value": "35499", "timestamp" : datetime.now().isoformat() })
-    print mc.del_document(database='default', collection='test', _id='56ba205be4b0a81ce4060509')
-    print mc.list_documents(database='default', collection='test')
+#    print mc.insert_document(database='default', collection='test', data={ "name": "test", "value": "35499", "timestamp" : datetime.now().isoformat() })
+#    print mc.del_document(database='default', collection='test', _id='56ba205be4b0a81ce4060509')
+    print mc.list_documents(database='default', collection='test', q='{ "name": "test" }', v='true')
 
 #    __MongoLabAPI_Handler__(mc, 'list_databases')
 
